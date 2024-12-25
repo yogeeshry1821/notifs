@@ -5,77 +5,103 @@ import { Server } from 'socket.io';
 import { createRedisClients } from './services/redis';
 import mongoose, { ConnectOptions } from 'mongoose';
 import Notification from './models/notiifcations';
+import Joi from 'joi';
+
 dotenv.config();
+
 // Initialize app and server
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: '*', 
+    origin: '*',
+    methods: ['GET', 'POST'],
   },
 });
 
 // Middleware
 app.use(express.json());
 
-// Redis Clients
-const { pubClient, subClient } = createRedisClients();
-
 // MongoDB Connection
-const uri:any=process.env.MONGODB_URL;
-mongoose.connect(uri, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-} as ConnectOptions).then(()=>console.log('Connected to MongoDB')).catch((err)=>console.log(err));
+mongoose
+  .connect(process.env.MONGODB_URL as string, {
+    useNewUrlParser: true,
+  } as ConnectOptions)
+  .then(() => console.log('Connected to MongoDB'))
+  .catch((err) => console.error(err));
 
-// Socket.IO Setup
-io.on('connection', (socket) => {
-  console.log(`User connected: ${socket.id}`);
-
-  socket.on('disconnect', () => {
-    console.log(`User disconnected: ${socket.id}`);
-  });
+// Input Validation Schema
+const notifySchema = Joi.object({
+  message: Joi.string().required(),
+  userId: Joi.string().required(),
 });
 
-// Redis Subscription
-subClient.subscribe('notifications', (message: string) => {
-  const notification = JSON.parse(message);
-  io.emit('receive_notification', notification);
-});
-subClient.on('message', (channel, message) => {
-  if (channel === 'notifications') {
-    const notification = JSON.parse(message);
-    io.emit('receive_notification', notification);
-  }
-});
-
-// API Endpoints
-app.post('/notify', async (req: Request, res: Response) => {
+// Main Async Block
+(async () => {
   try {
-    const { message, userId } = req.body;
+    const { pubClient, subClient } = await createRedisClients();
 
-    const notification = new Notification({ message, userId });
-    await notification.save();
+    // Redis Subscription
+    await subClient.subscribe('notifications', (message: string) => {
+      const notification = JSON.parse(message);
+      io.emit('receive_notification', notification);
+    });
 
-    pubClient.publish('notifications', JSON.stringify(notification));
-    res.status(200).json({ message: 'Notification sent!' });
+    // Socket.IO Setup
+    io.on('connection', (socket) => {
+      console.log(`User connected: ${socket.id}`);
+      socket.on('disconnect', () => {
+        console.log(`User disconnected: ${socket.id}`);
+      });
+    });
+
+    // API Endpoints
+    app.post('/notify', async (req: Request, res: Response) => {
+      const { error } = notifySchema.validate(req.body);
+      if (error) {
+        res.status(400).json({ error: error.details[0].message });
+      return;
+      }
+
+      try {
+        const { message, userId } = req.body;
+        const notification = new Notification({ message, userId });
+        await notification.save();
+        await pubClient.publish('notifications', JSON.stringify(notification));
+        res.status(200).json({ message: 'Notification sent!' });
+      } catch (err) {
+        res.status(500).json({ error: 'Failed to send notification' });
+      }
+    });
+
+    app.get('/notifications/:userId', async (req: Request, res: Response) => {
+      try {
+        const { userId } = req.params;
+        const notifications = await Notification.find({ userId });
+        res.status(200).json(notifications);
+      } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch notifications' });
+      }
+    });
+
+    // Graceful Shutdown
+    process.on('SIGINT', async () => {
+      console.log('Shutting down gracefully...');
+      await pubClient.quit();
+      await subClient.quit();
+      server.close(() => {
+        console.log('Server closed.');
+        process.exit(0);
+      });
+    });
+
+    // Start Server
+    const PORT = 3000;
+    server.listen(PORT, () => {
+      console.log(`WebSocket server running on http://localhost:${PORT}`);
+    });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to send notification' });
+    console.error('Failed to initialize Redis or start server:', err);
+    process.exit(1); // Exit with failure
   }
-});
-
-app.get('/notifications/:userId', async (req: Request, res: Response) => {
-  try {
-    const { userId } = req.params;
-    const notifications = await Notification.find({ userId });
-    res.status(200).json(notifications);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch notifications' });
-  }
-});
-
-// Start Server
-const PORT = 3000;
-server.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-});
+})();
