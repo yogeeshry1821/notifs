@@ -10,6 +10,9 @@ const createRedisClients = () => {
     subClient.on('error', (err) => console.error('Redis Sub Client Error:', err));
     pubClient.connect();
     subClient.connect();
+    subClient.subscribe('notifications', (message, channel) => {
+        console.log(`Message from ${channel}: ${message}`);
+    });
     return { pubClient, subClient };
 };
 exports.createRedisClients = createRedisClients;

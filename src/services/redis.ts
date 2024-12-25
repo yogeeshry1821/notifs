@@ -10,6 +10,10 @@ export const createRedisClients = () => {
 
   pubClient.connect();
   subClient.connect();
+  
+  subClient.subscribe('notifications', (message, channel) => {
+    console.log(`Message from ${channel}: ${message}`);
+  });
 
   return { pubClient, subClient };
 };
