@@ -11,34 +11,19 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createRedisClients = void 0;
 const redis_1 = require("redis");
-// Function to Create Redis Clients
 const createRedisClients = () => __awaiter(void 0, void 0, void 0, function* () {
     const pubClient = (0, redis_1.createClient)({
-        socket: {
-            host: '172.19.44.78', // Replace with your WSL IP address
-            port: 6379
-        }
-    }).on('error', (err) => console.error('Redis error:', err));
+        url: process.env.REDIS_URL || 'redis://localhost:6379',
+    });
     const subClient = pubClient.duplicate();
-    // Error Handlers
+    // Log connection and errors
     pubClient.on('error', (err) => console.error('Redis Pub Client Error:', err));
     subClient.on('error', (err) => console.error('Redis Sub Client Error:', err));
-    // Connecting Clients
-    try {
-        console.log('asdf');
-        yield pubClient.connect();
-        console.log('Redis Pub Client connected.');
-        yield subClient.connect();
-        console.log('Redis Sub Client connected.');
-    }
-    catch (err) {
-        console.error('Redis connection error:', err);
-        throw err; // Rethrow error if connection fails
-    }
-    // Subscribe to the 'notifications' channel
-    yield subClient.subscribe('notifications', (message, channel) => {
-        console.log(`Message from ${channel}: ${message}`);
-    });
+    pubClient.on('connect', () => console.log('Redis Pub Client connected'));
+    subClient.on('connect', () => console.log('Redis Sub Client connected'));
+    // Ensure clients are ready
+    yield pubClient.connect();
+    yield subClient.connect();
     return { pubClient, subClient };
 });
 exports.createRedisClients = createRedisClients;

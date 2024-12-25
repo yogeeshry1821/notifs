@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import { Server } from 'socket.io';
 import { createRedisClients } from './services/redis';
 import mongoose, { ConnectOptions } from 'mongoose';
-import Notification from './models/notiifcations';
+import Notification from './models/notifcations';
 import Joi from 'joi';
 
 dotenv.config();
@@ -60,7 +60,7 @@ const notifySchema = Joi.object({
       const { error } = notifySchema.validate(req.body);
       if (error) {
         res.status(400).json({ error: error.details[0].message });
-      return;
+        return;
       }
 
       try {

@@ -18,7 +18,7 @@ const dotenv_1 = __importDefault(require("dotenv"));
 const socket_io_1 = require("socket.io");
 const redis_1 = require("./services/redis");
 const mongoose_1 = __importDefault(require("mongoose"));
-const notiifcations_1 = __importDefault(require("./models/notiifcations"));
+const notifcations_1 = __importDefault(require("./models/notifcations"));
 const joi_1 = __importDefault(require("joi"));
 dotenv_1.default.config();
 // Initialize app and server
@@ -69,7 +69,7 @@ const notifySchema = joi_1.default.object({
             }
             try {
                 const { message, userId } = req.body;
-                const notification = new notiifcations_1.default({ message, userId });
+                const notification = new notifcations_1.default({ message, userId });
                 yield notification.save();
                 yield pubClient.publish('notifications', JSON.stringify(notification));
                 res.status(200).json({ message: 'Notification sent!' });
@@ -81,7 +81,7 @@ const notifySchema = joi_1.default.object({
         app.get('/notifications/:userId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             try {
                 const { userId } = req.params;
-                const notifications = yield notiifcations_1.default.find({ userId });
+                const notifications = yield notifcations_1.default.find({ userId });
                 res.status(200).json(notifications);
             }
             catch (err) {
